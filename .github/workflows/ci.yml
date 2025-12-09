@@ -1,0 +1,61 @@
+name: Simple CI Pipeline
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  ci-build-and-test:
+    runs-on: ubuntu-22.04
+    steps:
+    
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+      
+    - name: Set up JDK 21
+      uses: actions/setup-java@v4
+      with:
+        java-version: '21'
+        distribution: 'temurin'
+
+    # STEP 1: Build, Test, and Generate JaCoCo Report
+    # The 'verify' goal ensures tests run and the jacoco.xml report is generated in 'target/site/jacoco'.
+    - name: Build, Test, and Verify Project
+      run: mvn clean compile test package verify
+      
+    # STEP 2: Check 80% Coverage Threshold
+    - name: Check 80% Coverage Threshold
+      id: coverage_check
+      run: |
+        # Use a simplified JaCoCo check if configured in pom.xml, OR use the shell script for robustness.
+        # Since the goal is simplicity, we will assume the project's pom.xml is already configured
+        # to FAIL the build if 80% is not met (as suggested by the source document).
+        # We will keep the shell script for explicit checking since it's a core requirement.
+        
+        REPORT_PATH="target/site/jacoco/jacoco.xml"
+        THRESHOLD=80
+        
+        # 1. Extract the line-rate value (e.g., 0.800) from the XML
+        COVERAGE_DECIMAL=$(grep -oP 'line-rate="\K[0-9.]+' "$REPORT_PATH")
+        
+        if [ -z "$COVERAGE_DECIMAL" ]; then
+            echo "Error: Could not extract 'line-rate' from $REPORT_PATH"
+            exit 1
+        fi
+        
+        # 2. Calculate percentage using 'bc -l' for floating-point math
+        COVERAGE=$(echo "$COVERAGE_DECIMAL * 100" | bc -l)
+        
+        # 3. Round the coverage to an integer for comparison
+        COVERAGE_ROUNDED=$(printf "%.0f\n" $COVERAGE)
+        
+        echo "Calculated Coverage: $COVERAGE_ROUNDED%"
+
+        # 4. Check against the threshold
+        if (( $COVERAGE_ROUNDED < $THRESHOLD )); then
+          echo "Coverage below threshold: $COVERAGE_ROUNDED%"
+          exit 1
+        else
+          echo "Coverage meets the threshold: $COVERAGE_ROUNDED%"
+        fi
